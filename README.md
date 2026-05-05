@@ -3,6 +3,8 @@
 
 > This repository contains programs to track timesheets including tracking OT hours using streamlit.
 
+[![Open App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://timesheet-3wmj5hft2wxvvsqzk4dybm.streamlit.app/)
+
 ## Installation
 
 ### Clone Repo  
