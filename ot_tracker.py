@@ -25,15 +25,21 @@ def track_ot(file) -> pd.DataFrame:
     worked_df = df[~is_banked]   # hours that generate OT
     used_df = df[is_banked]    # hours that consume OT
 
+    # ===============================
+    # create pay period 
+    # ===============================
+    anchor = pd.Timestamp('2025-09-07')
+    df['pay_period'] = (anchor + pd.to_timedelta(((df['date'] - anchor).dt.days // 14) * 14, unit='D'))
 
-    # ===============================
-    # create daily df 
-    # ===============================
-    daily = worked_df.groupby('date', as_index=False)['hours'].sum()
-    is_weekday = daily['date'].dt.weekday < 5                                               # create weekday mask 
-    daily['ot_hours'] = daily['hours']                                                      # initialize OT col 
-    daily.loc[is_weekday, 'ot_hours'] = (daily.loc[is_weekday, 'hours'] - 8).clip(lower=0)  
-    daily['ot_hours_1.5'] = daily['ot_hours'] * 1.5                                         # OT hours are 1.5X 
+
+    # # ===============================
+    # # create daily df 
+    # # ===============================
+    # daily = worked_df.groupby('date', as_index=False)['hours'].sum()
+    # is_weekday = daily['date'].dt.weekday < 5                                               # create weekday mask 
+    # daily['ot_hours'] = daily['hours']                                                      # initialize OT col 
+    # daily.loc[is_weekday, 'ot_hours'] = (daily.loc[is_weekday, 'hours'] - 8).clip(lower=0)  
+    # daily['ot_hours_1.5'] = daily['ot_hours'] * 1.5                                         # OT hours are 1.5X 
 
     # ===============================
     # add banked OT used 
