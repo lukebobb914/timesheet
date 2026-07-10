@@ -5,12 +5,18 @@
 
 [![Open App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://timesheet-3wmj5hft2wxvvsqzk4dybm.streamlit.app/)
 
+## Assumptions 
+There are some assumptions made in this calculator and are presented below: 
+1. OT is counted at 1.5X and starts counting after a workday exceeds 8h 
+2. OT is banked until capped at 80h and is then paid out 
+3. If OT bank is already at cap, banked OT that is taken will first consume any earned OT during that pay period prior to being paid out  
+
 ## Installation
 
 ### Clone Repo  
 
 ```bash  
-git clone https://github.com/lukebobb914/csap-py.git
+git clone ...
 ```
 
 ### Create Virtual Environemnt  
