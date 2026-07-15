@@ -3,7 +3,9 @@
 # Contact Info     : mchan@core6.ca
 #
 # This is a ot tracker based on timesheet entries from CORE orking version
-#
+# #! wrong logic for calculating => rn my pay periods are mixed up with weekly OT calculation 
+# #! using the split_df => my OT calculation rn aggregates by every week starting on sunday but 
+# #! pay period may not start on sunday it may be dependent on pay period start date. 
 # ============================================================================
 
 # %%
@@ -56,51 +58,129 @@ df = df[['date', 'description', 'actual hours']].copy()
 anchor = pd.Timestamp('2025-09-07') #! pay period start date
 pay_period_days = 14
 pay_period_hours = pay_period_days / 7 * 40                                # get #of weeks multiplied by 40hr week
+ot_policy = 'weekly'                                                       # daily, weekly, bi-weekly  
+an_salary = 2
 
-an_salary = 65000
 
-
-summary_df = df.groupby('date', as_index=False).agg(total_hours=('actual hours', 'sum'))       # agg hours by day
 
 # ===============================
 # create daily worked hrs and ot taken df  
 # ===============================
 banked_mask = df['description'].str.contains('Banked Time', case=False, na=False)
-worked_df = (df.loc[~banked_mask].groupby('date', as_index=False).agg(hours_worked=('actual hours', 'sum')))
-used_ot_df = (df.loc[banked_mask].groupby('date', as_index=False).agg(hours_worked=('actual hours', 'sum')))
-split_df = worked_df.merge(used_ot_df, on='date', how='outer')      # retain all of worked rows 
-
-# ===============================
-# Combine total hours and split df 
-# ===============================
-summary_df = summary_df.merge(split_df, on='date', how='outer')
-
-summary_df.columns = ['date', 'total_hours', 'hours_worked', 'used_ot']
-summary_df['used_ot'] = summary_df['used_ot'].fillna(0)                             # fill nan with 0 
-summary_df['hours_worked'] = summary_df['hours_worked'].fillna(0)                   # fill nan with 0 
-
-
-# ===============================
-# Calculate OT hours per pay period 
-# ===============================
-summary_df['ot_hours'] = (summary_df['hours_worked'] - 8).clip(lower=0) 
-summary_df['ot_earned'] = summary_df['ot_hours'] * 1.5                     # OT is 1.5X regular 
-summary_df = summary_df.sort_values('date').reset_index(drop=True)
-summary_df = summary_df[['date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
 
 #%%
-# ===============================
-# Sum by pay period 
-# ===============================
-summary_df['pay_period'] = (anchor + pd.to_timedelta(((summary_df['date'] - anchor).dt.days // pay_period_days) * pay_period_days, unit='D'))
-summary_df = summary_df.groupby('pay_period', as_index=False).agg(
-    total_hours=('total_hours', 'sum'), 
-    hours_worked=('hours_worked', 'sum'), 
-    ot_hours=('ot_hours', 'sum'), 
-    ot_earned=('ot_earned', 'sum'), 
-    used_ot=('used_ot', 'sum'))
-summary_df['to_date'] = summary_df['pay_period'] + pd.Timedelta(days=13)
-summary_df = summary_df[['pay_period', 'to_date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
+if ot_policy == 'daily': 
+    summary_df = df.groupby('date', as_index=False).agg(total_hours=('actual hours', 'sum'))       # agg hours by day
+    worked_df = (df.loc[~banked_mask].groupby('date', as_index=False).agg(hours_worked=('actual hours', 'sum')))
+    used_ot_df = (df.loc[banked_mask].groupby('date', as_index=False).agg(hours_worked=('actual hours', 'sum')))
+    split_df = worked_df.merge(used_ot_df, on='date', how='outer')      # retain all of worked rows 
+
+    # ===============================
+    # Combine total hours and split df 
+    # ===============================
+
+    summary_df = summary_df.merge(split_df, on='date', how='outer')
+    summary_df.columns = ['date', 'total_hours', 'hours_worked', 'used_ot']
+    summary_df['used_ot'] = summary_df['used_ot'].fillna(0)                             # fill nan with 0 
+    summary_df['hours_worked'] = summary_df['hours_worked'].fillna(0)                   # fill nan with 0 
+
+    # ===============================
+    # Calculate OT hours per pay period 
+    # ===============================
+    summary_df['ot_hours'] = (summary_df['hours_worked'] - 8).clip(lower=0) 
+    summary_df['ot_earned'] = summary_df['ot_hours'] * 1.5                     # OT is 1.5X regular 
+    summary_df = summary_df.sort_values('date').reset_index(drop=True)
+    summary_df = summary_df[['date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
+
+    # ===============================
+    # Sum by pay period 
+    # ===============================
+    summary_df['pay_period'] = (anchor + pd.to_timedelta(((summary_df['date'] - anchor).dt.days // pay_period_days) * pay_period_days, unit='D'))
+    summary_df = summary_df.groupby('pay_period', as_index=False).agg(
+        total_hours=('total_hours', 'sum'), 
+        hours_worked=('hours_worked', 'sum'), 
+        ot_hours=('ot_hours', 'sum'), 
+        ot_earned=('ot_earned', 'sum'), 
+        used_ot=('used_ot', 'sum'))
+    summary_df['to_date'] = summary_df['pay_period'] + pd.Timedelta(days=13)
+    summary_df = summary_df[['pay_period', 'to_date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
+
+elif ot_policy == 'weekly':
+    # create weekly summary df (All hours including banked time taken)
+    summary_df = df.groupby(pd.Grouper(key='date', freq='W-SAT'), as_index=False).agg(hours_worked=('actual hours', 'sum'))
+    summary_df.rename(columns={'date': 'week_to'}, inplace=True)
+    summary_df.insert(0, 'week_from', summary_df['week_to'] - pd.Timedelta(days=6))   # create week_from col 
+
+
+    # create split df separating worked and banked time taken
+    worked_df = (df.loc[~banked_mask].groupby(pd.Grouper(key='date', freq='W-SAT'), as_index=False).agg(hours_worked=('actual hours', 'sum')))
+    used_ot_df = (df.loc[banked_mask].groupby(pd.Grouper(key='date', freq='W-SAT'), as_index=False).agg(hours_worked=('actual hours', 'sum')))
+    split_df = worked_df.merge(used_ot_df, on='date', how='outer')      # retain all of worked rows 
+    split_df.rename(columns={'date': 'week_to'}, inplace=True)
+
+    # ===============================
+    # Combine total hours and split df 
+    # ===============================
+    summary_df = summary_df.merge(split_df, on='week_to', how='outer')
+    summary_df.columns = ['week_from', 'week_to','total_hours', 'hours_worked', 'used_ot']   # rename cols 
+    summary_df['used_ot'] = summary_df['used_ot'].fillna(0)                                  # fill nan with 0 
+    summary_df['hours_worked'] = summary_df['hours_worked'].fillna(0)                        # fill nan with 0 
+
+    # ===============================
+    # Calculate OT hours per pay period 
+    # ===============================
+    summary_df['ot_hours'] = (summary_df['hours_worked'] - 40).clip(lower=0) 
+    summary_df['ot_earned'] = summary_df['ot_hours'] * 1.5                     # OT is 1.5X regular 
+    summary_df = summary_df.sort_values('week_from').reset_index(drop=True)
+    summary_df = summary_df[['week_from', 'week_to', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
+
+    # ===============================
+    # Sum by pay period 
+    # ===============================
+    summary_df['pay_period'] = (anchor + pd.to_timedelta(((summary_df['week_from'] - anchor).dt.days // pay_period_days) * pay_period_days, unit='D'))
+    summary_df = summary_df.groupby('pay_period', as_index=False).agg(
+        total_hours=('total_hours', 'sum'), 
+        hours_worked=('hours_worked', 'sum'), 
+        ot_hours=('ot_hours', 'sum'), 
+        ot_earned=('ot_earned', 'sum'), 
+        used_ot=('used_ot', 'sum'))
+    summary_df['to_date'] = summary_df['pay_period'] + pd.Timedelta(days=13)
+    summary_df = summary_df[['pay_period', 'to_date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
+
+
+
+#%%
+# # ===============================
+# # Combine total hours and split df 
+# # ===============================
+
+# summary_df = summary_df.merge(split_df, on='date', how='outer')
+# summary_df.columns = ['date', 'total_hours', 'hours_worked', 'used_ot']
+# summary_df['used_ot'] = summary_df['used_ot'].fillna(0)                             # fill nan with 0 
+# summary_df['hours_worked'] = summary_df['hours_worked'].fillna(0)                   # fill nan with 0 
+
+
+# # ===============================
+# # Calculate OT hours per pay period 
+# # ===============================
+# summary_df['ot_hours'] = (summary_df['hours_worked'] - 8).clip(lower=0) 
+# summary_df['ot_earned'] = summary_df['ot_hours'] * 1.5                     # OT is 1.5X regular 
+# summary_df = summary_df.sort_values('date').reset_index(drop=True)
+# summary_df = summary_df[['date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
+
+# #%%
+# # ===============================
+# # Sum by pay period 
+# # ===============================
+# summary_df['pay_period'] = (anchor + pd.to_timedelta(((summary_df['date'] - anchor).dt.days // pay_period_days) * pay_period_days, unit='D'))
+# summary_df = summary_df.groupby('pay_period', as_index=False).agg(
+#     total_hours=('total_hours', 'sum'), 
+#     hours_worked=('hours_worked', 'sum'), 
+#     ot_hours=('ot_hours', 'sum'), 
+#     ot_earned=('ot_earned', 'sum'), 
+#     used_ot=('used_ot', 'sum'))
+# summary_df['to_date'] = summary_df['pay_period'] + pd.Timedelta(days=13)
+# summary_df = summary_df[['pay_period', 'to_date', 'total_hours', 'hours_worked', 'ot_hours', 'ot_earned', 'used_ot']]
 
 
 #%%
